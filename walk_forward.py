@@ -58,7 +58,7 @@ class Walker:
         time.sleep(1)
 
     def sample(self):
-        return np.random.randint(256)
+        return np.random.randint(16) * 16
 
     def get_step(self, hips, ankles):
         action = 0
@@ -68,6 +68,8 @@ class Walker:
         return action
 
     def step(self, action):
+        
+        #file = open('capture.csv','w')
         
         hip_action = action // 16
         pos_fr = hip_action & 0b0001 != 0
@@ -115,19 +117,34 @@ class Walker:
         else:
             self.move_ankle(3, 1)
         
-        t0 = time.time() + 1.0
+        t0 = time.time() + 0.085
         dx = 0.0
         dy = 0.0
         n = 0
+        diff = 0.0
+        max_read = np.zeros(3)
+        #reading_list = []
         while time.time() < t0:  # assumes each loop takes apx same amount of time
             accel = mpu9250.read()['accel']
-            dx += accel[0]
-            dy += accel[1]
+            max_read = np.maximum(accel, max_read)
+            #reading_list.append(accel)
+            diff += accel[0] - accel[1]
             n += 1
+        time.sleep(0.25)
+        reward = -diff
+        print(-diff)
+        reward = 0 if reward < 45 else reward
         
-        reward = abs(dx) + abs(dy)  # walk diagonally?
-        print(n,reward)
-        done = reward > 1000
+        '''      
+        for i in reading_list:
+            for j in i:
+                file.write(str(j))
+                file.write(',')
+            file.write('\n')
+            
+        file.close()
+        '''        
+        done = bool(reward > 45)
         return action, reward, done 
 
     def getAhrs(self):
@@ -136,7 +153,7 @@ class Walker:
     def learn(self):
         alpha = 0.10
         explore = 1.0
-        q = np.zeros((256,256))
+        q = np.zeros((16,16))
         for n in range(100):
             w.reset()
             time.sleep(3)
@@ -148,19 +165,19 @@ class Walker:
                     action = self.sample()
                 elif np.argmax(q[state]) > 0:
                     action = np.argmax(q[state])
+                    action *= 16
                 else:
                     action = self.sample()
                     
                 obs, reward, done = self.step(action)
+                obs = int(obs/16)
                 q[state][obs] = alpha * q[state][obs] + (1 - alpha) * (reward + np.max(q[obs]))
-                print(state,obs,reward)
                 state = obs
                 
             explore *= .9
             explore = max(explore, .01)
             print(n, reward, np.sum(q), explore)
 
-#w = Walker()
-#w.start()
-#w.reset()
-#w.learn()
+w = Walker()
+w.start()
+w.learn()
